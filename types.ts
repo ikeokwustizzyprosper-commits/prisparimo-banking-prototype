@@ -60,6 +60,8 @@ export interface User {
   isBlocked?: boolean;
   isActivated?: boolean;
   profession?: string;
+  dob?: string;
+  income?: string;
   cards?: Card[];
   limits?: {
     dailyTransfer: number;

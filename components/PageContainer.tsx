@@ -30,10 +30,10 @@ const Header: React.FC<{ title: string }> = ({ title }) => {
 };
 
 const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input {...props} className="w-full px-4 py-3 rounded-xl bg-muted dark:bg-dark-input border border-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent font-bold text-sm"/>
+    <input {...props} className="w-full px-4 py-3 rounded-xl bg-muted dark:bg-dark-input border border-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent font-bold text-sm text-slate-900 dark:text-white"/>
 );
 const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement> & { children: React.ReactNode }) => (
-    <select {...props} className="w-full px-4 py-3 rounded-xl bg-muted dark:bg-dark-input border border-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none font-bold text-sm">
+    <select {...props} className="w-full px-4 py-3 rounded-xl bg-muted dark:bg-dark-input border border-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent appearance-none font-bold text-sm text-slate-900 dark:text-white">
         {props.children}
     </select>
 );
@@ -1040,13 +1040,31 @@ const TransferPage = () => {
         if (found) {
             setDetectedUser(found);
             setRecipientName(found.name);
-            if (transferType === 'local') {
+            
+            // Auto-detect country, bank and transfer type from the recipient's currency
+            const userCurrency = found.currency || 'GBP';
+            const matchingCountry = COUNTRIES_WITH_BANKS.find(c => c.currency === userCurrency);
+            
+            if (userCurrency === 'GBP') {
+                setTransferType('local');
+                setSelectedCountryName('United Kingdom');
                 setBankName('Prisparimo Core');
+                setIsCustomBank(false);
+            } else if (matchingCountry) {
+                setTransferType('international');
+                setSelectedCountryName(matchingCountry.name);
+                setBankName(matchingCountry.banks[0] || '');
+                setIsCustomBank(false);
+            } else {
+                setTransferType('local');
+                setSelectedCountryName('United Kingdom');
+                setBankName('Prisparimo Core');
+                setIsCustomBank(false);
             }
         } else {
             setDetectedUser(null);
         }
-    }, [accountNumber, state.users, transferType]);
+    }, [accountNumber, state.users]);
 
     // Listen to custom autofill-transfer events from the side companion
     useEffect(() => {
@@ -1217,7 +1235,7 @@ const TransferPage = () => {
                                 required 
                             />
 
-                            {detectedUser ? (
+                            {detectedUser && (
                                 <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-2xl flex items-center gap-3 animate-in zoom-in-95 duration-200">
                                     <img src={detectedUser.avatar} className="w-8 h-8 rounded-lg object-cover" referrerPolicy="no-referrer" />
                                     <div>
@@ -1225,13 +1243,6 @@ const TransferPage = () => {
                                         <p className="text-xs font-bold text-gray-900 dark:text-white leading-none mt-1.5">{detectedUser.name}</p>
                                     </div>
                                 </div>
-                            ) : (
-                                <Input 
-                                    placeholder={t('fullLegalName')} 
-                                    value={recipientName} 
-                                    onChange={e => setRecipientName(e.target.value)} 
-                                    required 
-                                />
                             )}
                         </div>
 
@@ -1259,7 +1270,7 @@ const TransferPage = () => {
                                         {formatCurrency(transferType === 'local' ? 1.50 : 12.50, state.currentUser?.currency || 'GBP')}
                                     </span>
                                 </div>
-                                <div className="flex justify-between items-center text-[11px] uppercase font-black tracking-wider text-foreground border-t border-border/80 dark:border-dark-border/80 pt-2 mt-1">
+                                <div className="flex justify-between items-center text-[11px] uppercase font-black tracking-wider text-foreground dark:text-dark-foreground border-t border-border/80 dark:border-dark-border/80 pt-2 mt-1">
                                     <span>Total Deduction:</span>
                                     <span className="tabular-nums font-extrabold text-primary">
                                         {formatCurrency(parseFloat(amount) + (transferType === 'local' ? 1.50 : 12.50), state.currentUser?.currency || 'GBP')}
@@ -1269,59 +1280,15 @@ const TransferPage = () => {
                         )}
 
                         <div className="pt-2">
-                            <Button type="submit">{t('authorizeDispatch')}</Button>
+                            <Button type="submit" disabled={!detectedUser} className={!detectedUser ? "opacity-50 cursor-not-allowed" : ""}>
+                                {t('authorizeDispatch')}
+                            </Button>
                         </div>
                     </form>
                 )}
             </div>
 
-            {/* Recognized Vault Directory */}
-            <div className="bg-white dark:bg-dark-card p-6 rounded-[2rem] border border-border dark:border-dark-border shadow-xl space-y-4">
-                <div className="flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                    <div>
-                        <h4 className="text-xs font-black uppercase tracking-widest text-gray-900 dark:text-white">Recognized Vault Directory</h4>
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold">Click any account below to instantly fill details and verify</p>
-                    </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-1">
-                    {state.users.filter(u => u.id !== state.currentUser?.id && u.role !== 'admin').map(u => (
-                        <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => {
-                                setAccountNumber(u.accountNumber);
-                                setRecipientName(u.name);
-                                // Determine matching country / currency / bank
-                                if (u.currency === 'USD') {
-                                    setTransferType('international');
-                                    setSelectedCountryName('United States');
-                                    setBankName('Chase Bank');
-                                    setIsCustomBank(false);
-                                } else {
-                                    setTransferType('local');
-                                    setSelectedCountryName('United Kingdom');
-                                    setBankName('Prisparimo Core');
-                                    setIsCustomBank(false);
-                                }
-                            }}
-                            className="flex items-center gap-3 p-3 rounded-2xl border border-border/60 dark:border-dark-border/60 hover:border-teal-500/50 hover:bg-teal-50/25 dark:hover:bg-teal-950/15 text-left transition-all duration-300 group"
-                        >
-                            <img src={u.avatar} className="w-9 h-9 rounded-xl object-cover border border-border/40" referrerPolicy="no-referrer" />
-                            <div className="flex-1 min-w-0">
-                                <p className="text-xs font-extrabold text-gray-900 dark:text-white truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition">{u.name}</p>
-                                <p className="text-[9px] font-black text-muted-foreground uppercase opacity-80 mt-0.5 tracking-tight">Acc: <span className="font-mono text-gray-900 dark:text-white bg-muted dark:bg-dark-muted px-1 rounded">{u.accountNumber}</span></p>
-                            </div>
-                            <div className="text-right">
-                                <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400">
-                                    {u.currency}
-                                </span>
-                            </div>
-                        </button>
-                    ))}
-                </div>
-            </div>
 
             <PinVerificationModal isOpen={status === 'pin'} onClose={() => setStatus('idle')} onVerify={onPinVerify} error={pinError} />
         </div>
@@ -1425,23 +1392,61 @@ const LoanPage = () => {
                             <p className="text-[9px] font-black uppercase tracking-widest opacity-40 text-center">{t('transferToLoan')}</p>
                             <Input type="number" placeholder={t('assetAmount')} id="loan-amount" />
                             <div className="grid grid-cols-2 gap-3">
-                                <Button onClick={() => {
+                                <Button onClick={async () => {
                                     const val = (document.getElementById('loan-amount') as HTMLInputElement).value;
                                     const amount = parseFloat(val);
                                     if (!amount || amount <= 0) return alert(t('invalidAmount'));
                                     if (amount > state.currentUser!.balance) return alert(t('insufficientBalance'));
                                     dispatch({ type: 'MOVE_TO_LOAN', payload: amount });
+                                    const updatedUser = {
+                                        ...state.currentUser!,
+                                        balance: state.currentUser!.balance - amount,
+                                        loanBalance: state.currentUser!.loanBalance + amount,
+                                        transactions: [
+                                            { id: `txn_${Date.now()}`, date: new Date().toISOString(), description: 'transferToLoan', amount: -amount, type: 'debit' as const, category: 'Loan', status: 'Completed' as const }, 
+                                            ...(state.currentUser!.transactions || [])
+                                        ]
+                                    };
                                     (document.getElementById('loan-amount') as HTMLInputElement).value = '';
                                     alert(t('loanTransactionAuthorized'));
+
+                                    try {
+                                        await fetch('/api/users/update', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify(updatedUser)
+                                        });
+                                    } catch (err) {
+                                        console.error("Error syncing loan action with server:", err);
+                                    }
                                 }}>{t('transferToLoan')}</Button>
-                                <Button onClick={() => {
+                                <Button onClick={async () => {
                                     const val = (document.getElementById('loan-amount') as HTMLInputElement).value;
                                     const amount = parseFloat(val);
                                     if (!amount || amount <= 0) return alert(t('invalidAmount'));
                                     if (amount > state.currentUser!.loanBalance) return alert(t('insufficientBalance'));
                                     dispatch({ type: 'MOVE_FROM_LOAN', payload: amount });
+                                    const updatedUser = {
+                                        ...state.currentUser!,
+                                        balance: state.currentUser!.balance + amount,
+                                        loanBalance: state.currentUser!.loanBalance - amount,
+                                        transactions: [
+                                            { id: `txn_${Date.now()}`, date: new Date().toISOString(), description: 'withdrawFromLoan', amount: amount, type: 'credit' as const, category: 'Loan', status: 'Completed' as const }, 
+                                            ...(state.currentUser!.transactions || [])
+                                        ]
+                                    };
                                     (document.getElementById('loan-amount') as HTMLInputElement).value = '';
                                     alert(t('loanTransactionAuthorized'));
+
+                                    try {
+                                        await fetch('/api/users/update', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify(updatedUser)
+                                        });
+                                    } catch (err) {
+                                        console.error("Error syncing loan action with server:", err);
+                                    }
                                 }} className="bg-slate-100 dark:bg-dark-muted text-foreground dark:text-white">{t('withdrawFromLoan')}</Button>
                             </div>
                         </div>
@@ -1743,7 +1748,7 @@ const SettingsPage = () => {
                 
                 <div className="flex justify-between items-center">
                     <div className="space-y-0.5">
-                        <span className="text-[10px] font-black uppercase text-foreground tracking-widest">{t('nightProtocol')}</span>
+                        <span className="text-[10px] font-black uppercase text-foreground dark:text-dark-foreground tracking-widest">{t('nightProtocol')}</span>
                         <p className="text-[8px] text-muted-foreground font-bold uppercase opacity-60">{t('toggleDarkInterface')}</p>
                     </div>
                     <button onClick={toggleTheme} className={`w-12 h-6 rounded-full relative transition-all duration-300 ${theme === 'dark' ? 'bg-primary shadow-lg shadow-primary/30' : 'bg-slate-200'}`}>
@@ -1753,7 +1758,7 @@ const SettingsPage = () => {
                 
                 <div className="flex justify-between items-center pt-5 border-t border-border/50">
                     <div className="space-y-0.5">
-                        <span className="text-[10px] font-black uppercase text-foreground tracking-widest">{t('authPin')}</span>
+                        <span className="text-[10px] font-black uppercase text-foreground dark:text-dark-foreground tracking-widest">{t('authPin')}</span>
                         <p className="text-[8px] text-muted-foreground font-bold uppercase opacity-60">{t('secureTransactionAuth')}</p>
                     </div>
                     <button onClick={() => dispatch({type: 'SET_PAGE', payload: Page.CHANGE_PIN})} className="px-3 py-1.5 bg-primary/10 text-primary font-black text-[9px] uppercase rounded-lg hover:bg-primary/20 transition tracking-widest">{t('configure')}</button>
@@ -1761,7 +1766,7 @@ const SettingsPage = () => {
 
                 <div className="flex justify-between items-center pt-5 border-t border-border/50">
                     <div className="space-y-0.5">
-                        <span className="text-[10px] font-black uppercase text-foreground tracking-widest">{t('limits')}</span>
+                        <span className="text-[10px] font-black uppercase text-foreground dark:text-dark-foreground tracking-widest">{t('limits')}</span>
                         <p className="text-[8px] text-muted-foreground font-bold uppercase opacity-60">{t('manageSpendingLimits')}</p>
                     </div>
                     <button onClick={() => dispatch({type: 'SET_PAGE', payload: Page.LIMITS})} className="px-3 py-1.5 bg-primary/10 text-primary font-black text-[9px] uppercase rounded-lg hover:bg-primary/20 transition tracking-widest">{t('configure')}</button>
@@ -1770,7 +1775,7 @@ const SettingsPage = () => {
                 {state.currentUser?.role === 'admin' && (
                     <div className="flex justify-between items-center pt-5 border-t border-border/50">
                         <div className="space-y-0.5">
-                            <span className="text-[10px] font-black uppercase text-foreground tracking-widest">{t('adminRights')}</span>
+                            <span className="text-[10px] font-black uppercase text-foreground dark:text-dark-foreground tracking-widest">{t('adminRights')}</span>
                             <p className="text-[8px] text-muted-foreground font-bold uppercase opacity-60">{t('systemWideAdminAccess')}</p>
                         </div>
                         <span className="text-green-600 font-black text-[8px] uppercase bg-green-500/10 px-2.5 py-1 rounded-lg border border-green-500/20">{t('level5Access')}</span>
@@ -1883,10 +1888,26 @@ const LimitsPage = () => {
 
     const [success, setSuccess] = useState(false);
 
-    const handleUpdate = () => {
+    const handleUpdate = async () => {
         dispatch({ type: 'UPDATE_LIMITS', payload: limits });
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
+
+        if (state.currentUser) {
+            const updatedUser = {
+                ...state.currentUser,
+                limits: limits
+            };
+            try {
+                await fetch('/api/users/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedUser)
+                });
+            } catch (err) {
+                console.error("Error syncing limits with server:", err);
+            }
+        }
     };
 
     return (
@@ -1959,7 +1980,7 @@ const SavingsPage = () => {
     const { state, dispatch, t } = useAppContext();
     const [val, setVal] = useState('');
 
-    const handleVaultAction = (action: 'move_to' | 'move_from') => {
+    const handleVaultAction = async (action: 'move_to' | 'move_from') => {
         if (!state.currentUser?.isActivated) {
             dispatch({ type: 'SET_PAGE', payload: Page.RESTRICTION });
             return;
@@ -1967,15 +1988,46 @@ const SavingsPage = () => {
         const amount = parseFloat(val);
         if (isNaN(amount) || amount <= 0) return alert(t('invalidAmount'));
         
+        let updatedUser = null;
         if (action === 'move_to') {
             if (amount > state.currentUser.balance) return alert(t('insufficientBalance'));
             dispatch({ type: 'MOVE_TO_SAVINGS', payload: amount });
+            updatedUser = {
+                ...state.currentUser,
+                balance: state.currentUser.balance - amount,
+                savingsBalance: state.currentUser.savingsBalance + amount,
+                transactions: [
+                    { id: `txn_${Date.now()}`, date: new Date().toISOString(), description: 'transferToSavings', amount: -amount, type: 'debit' as const, category: 'Savings', status: 'Completed' as const }, 
+                    ...(state.currentUser.transactions || [])
+                ]
+            };
         } else {
             if (amount > state.currentUser.savingsBalance) return alert(t('insufficientVaultAssets'));
             dispatch({ type: 'MOVE_FROM_SAVINGS', payload: amount });
+            updatedUser = {
+                ...state.currentUser,
+                balance: state.currentUser.balance + amount,
+                savingsBalance: state.currentUser.savingsBalance - amount,
+                transactions: [
+                    { id: `txn_${Date.now()}`, date: new Date().toISOString(), description: 'withdrawFromSavings', amount: amount, type: 'credit' as const, category: 'Savings', status: 'Completed' as const }, 
+                    ...(state.currentUser.transactions || [])
+                ]
+            };
         }
         setVal('');
         alert(t('vaultTransactionAuthorized'));
+
+        if (updatedUser) {
+            try {
+                await fetch('/api/users/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedUser)
+                });
+            } catch (err) {
+                console.error("Error syncing vault action with server:", err);
+            }
+        }
     };
 
     return (
@@ -2068,7 +2120,7 @@ const RestrictionPage = () => {
                 )}
 
                 <div className="pt-4 border-t border-border dark:border-dark-border">
-                    <Button onClick={() => dispatch({ type: 'TOGGLE_CHAT', payload: true })} className="bg-slate-100 dark:bg-dark-muted text-foreground">{t('chatWithAgent')}</Button>
+                    <Button onClick={() => dispatch({ type: 'TOGGLE_CHAT', payload: true })} className="bg-slate-100 dark:bg-dark-muted text-foreground dark:text-dark-foreground">{t('chatWithAgent')}</Button>
                 </div>
                 
                 <p className="text-[8px] font-black uppercase opacity-30 tracking-widest">Reference: ERR-LOC-{Math.floor(Math.random() * 1000000)}</p>
@@ -2126,7 +2178,7 @@ const ChangePinPage = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
 
-    const handleUpdatePin = () => {
+    const handleUpdatePin = async () => {
         setError(null);
         if (currentPin !== state.currentUser?.pin) return setError(t('currentPinIncorrect'));
         if (newPin.length !== 4 || !/^\d+$/.test(newPin)) return setError(t('pinMustBe4Digits'));
@@ -2138,6 +2190,22 @@ const ChangePinPage = () => {
         setNewPin('');
         setConfirmPin('');
         setTimeout(() => setSuccess(false), 3000);
+
+        if (state.currentUser) {
+            const updatedUser = {
+                ...state.currentUser,
+                pin: newPin
+            };
+            try {
+                await fetch('/api/users/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updatedUser)
+                });
+            } catch (err) {
+                console.error("Error syncing PIN with server:", err);
+            }
+        }
     };
 
     return (

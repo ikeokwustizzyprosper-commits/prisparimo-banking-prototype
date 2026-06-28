@@ -304,7 +304,7 @@ const Chatbot: React.FC<{ isOpen: boolean; onClose: () => void; }> = ({ isOpen, 
                                             value={inputValue} 
                                             onChange={e => setInputValue(e.target.value)}
                                             placeholder={t('typeQuestionPlaceholder')}
-                                            className="flex-1 bg-slate-50 dark:bg-dark-muted px-5 py-4 rounded-[1.5rem] text-[13px] font-bold border-none focus:ring-2 focus:ring-primary/20 placeholder:text-gray-300"
+                                            className="flex-1 bg-slate-50 dark:bg-dark-muted px-5 py-4 rounded-[1.5rem] text-[13px] font-bold border-none focus:ring-2 focus:ring-primary/20 placeholder:text-gray-300 text-slate-900 dark:text-white"
                                         />
                                     </div>
                                     <button 

@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useReducer, useEffect, useState, useMemo } from 'react';
-import { AppState, Page, Action, AuthView, User, Transaction, Notification, Message } from './types';
+import { AppState, Page, Action, AuthView, User, Transaction, Message } from './types';
 import { MOCK_USER, MOCK_ADMIN, MOCK_USER_JOSEPH, MOCK_USER_PARADISE, MOCK_USER_ALEX, MOCK_USER_ALEX_JEFF, MOCK_USER_ALEX_CHOI, MOCK_USER_THOMAS, MOCK_USER_JARK, MOCK_USER_JAMES, MOCK_USER_JOAKIM, formatCurrency, convertFromGbp } from './constants';
 import { translations, TranslationKeys } from './translations';
 import Auth from './components/Auth';
@@ -9,7 +9,7 @@ import PageContainer from './components/PageContainer';
 import BottomNav from './components/BottomNav';
 import Modal from './components/Modal';
 import Chatbot from './components/Chatbot';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, ArrowLeft, Landmark } from 'lucide-react';
 import { generateReceiptPDF } from './utils/pdfGenerator';
 
 // --- THEME ---
@@ -597,14 +597,30 @@ const TransactionDetailModal: React.FC<{ transaction: Transaction; onClose: () =
     return (
         <Modal isOpen={!!transaction} onClose={onClose}>
             <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-dark-border/40 pb-3 -mx-2 px-2">
+                    <button 
+                        onClick={onClose} 
+                        className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-muted-foreground hover:text-foreground dark:hover:text-white transition-colors"
+                    >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>{t('back')}</span>
+                    </button>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground dark:text-dark-muted-foreground">Receipt</span>
+                </div>
+
                 <div className="text-center">
+                    <div className="flex items-center justify-center gap-1.5 mb-3 text-primary dark:text-teal-400">
+                        <Landmark className="w-5 h-5" />
+                        <span className="text-[11px] font-black uppercase tracking-[0.25em]">Prisparimo Bank</span>
+                    </div>
+
                     <div className={`w-16 h-16 mx-auto rounded-2xl flex items-center justify-center mb-4 ${transaction.type === 'credit' ? 'bg-green-100 dark:bg-green-900/30 text-green-600' : 'bg-red-100 dark:bg-red-900/30 text-red-600'}`}>
                         <span className="text-3xl font-black">{transaction.type === 'credit' ? '↓' : '↑'}</span>
                     </div>
                     <h2 className="text-lg font-black uppercase tracking-tight">{t(transaction.description as any)}</h2>
                     <p className={`text-2xl font-black tracking-tighter mt-1 ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
                          {transaction.type === 'credit' ? '+' : ''}{formatCurrency(convertedAmount, state.currentCurrency)}
-                    </p>
+                     </p>
                     <div className="mt-2 flex items-center justify-center gap-1.5">
                         <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full border flex items-center gap-1.5 ${
                             transaction.status === 'Completed' ? 'bg-green-50 text-green-600 border-green-200' : 
@@ -635,8 +651,11 @@ const TransactionDetailModal: React.FC<{ transaction: Transaction; onClose: () =
                 <div className="flex flex-col gap-2">
                     <button onClick={() => generateReceiptPDF(transaction)} className="w-full bg-teal-600 hover:bg-teal-700 text-white font-black uppercase py-3 rounded-xl text-[10px] tracking-widest shadow-md transition-all">Download PDF Receipt</button>
                     <div className="flex gap-3">
-                        <button onClick={() => window.print()} className="flex-1 bg-muted dark:bg-dark-muted text-foreground font-black uppercase py-3 rounded-xl text-[10px] tracking-widest border border-border dark:border-dark-border">{t('printReceipt')}</button>
-                        <button onClick={onClose} className="flex-1 bg-primary text-white font-black uppercase py-3 rounded-xl text-[10px] tracking-widest shadow-lg shadow-primary/20">{t('close')}</button>
+                        <button onClick={() => window.print()} className="flex-1 bg-muted dark:bg-dark-muted text-foreground dark:text-dark-foreground font-black uppercase py-3 rounded-xl text-[10px] tracking-widest border border-border dark:border-dark-border">{t('printReceipt')}</button>
+                        <button onClick={onClose} className="flex-1 bg-primary text-white font-black uppercase py-3 rounded-xl text-[10px] tracking-widest shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5">
+                            <ArrowLeft className="w-3.5 h-3.5" />
+                            <span>{t('back')}</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -664,11 +683,138 @@ const MainAppView: React.FC = () => {
 
 const AppContent: React.FC = () => {
     const { state, dispatch } = useAppContext();
+    const [toast, setToast] = useState<{ id: string; title: string; message: string; type: string } | null>(null);
+    const [seenNotifications, setSeenNotifications] = useState<Set<string>>(() => new Set());
+
+    // Request notification permission and register FCM token
+    useEffect(() => {
+        if (state.isAuthenticated && state.currentUser) {
+            // Ask for native browser Notification permission
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
+            // Generate or fetch FCM token
+            let fcmToken = localStorage.getItem('device_fcm_token');
+            if (!fcmToken) {
+                fcmToken = `fcm_token_${Math.random().toString(36).substring(2, 15)}_${Date.now()}`;
+                localStorage.setItem('device_fcm_token', fcmToken);
+            }
+
+            // Sync token with backend
+            if (state.currentUser.fcmToken !== fcmToken) {
+                fetch('/api/users/update-fcm-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: state.currentUser.id, fcmToken })
+                })
+                .then(res => {
+                    if (res.ok) {
+                        dispatch({ type: 'UPDATE_USER', payload: { ...state.currentUser, fcmToken } });
+                    }
+                })
+                .catch(err => console.warn("FCM Token sync error:", err));
+            }
+        }
+    }, [state.isAuthenticated, state.currentUser?.id]);
+
+    // Track seen notifications and trigger alerts
+    useEffect(() => {
+        if (!state.currentUser) return;
+        const notifications = state.currentUser.notifications || [];
+        
+        // Find any unread notification that we haven't processed yet
+        const unreadToAlert = notifications.filter(n => !n.read && !seenNotifications.has(n.id));
+
+        if (unreadToAlert.length > 0) {
+            // Update seen notification tracking immediately to prevent duplicate triggering
+            const updatedSeen = new Set(seenNotifications);
+            unreadToAlert.forEach(n => updatedSeen.add(n.id));
+            setSeenNotifications(updatedSeen);
+
+            // Audio notification function
+            const playNotificationSound = () => {
+                try {
+                    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+                    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.1); // E6 note
+                    
+                    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+                    
+                    osc.start(ctx.currentTime);
+                    osc.stop(ctx.currentTime + 0.4);
+                } catch (e) {
+                    console.warn("Audio Context blocked/unsupported:", e);
+                }
+            };
+
+            unreadToAlert.forEach(n => {
+                // Play notification chime
+                playNotificationSound();
+
+                // Native notification when page is not focused/active
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification(n.title, {
+                        body: n.message,
+                        icon: '/vite.svg'
+                    });
+                }
+
+                // Visual in-app toast alert
+                setToast({
+                    id: n.id,
+                    title: n.title,
+                    message: n.message,
+                    type: n.type || 'success'
+                });
+            });
+        }
+    }, [state.currentUser?.notifications, seenNotifications]);
+
+    // Auto-dismiss visual toast after 6 seconds
+    useEffect(() => {
+        if (toast) {
+            const timer = setTimeout(() => {
+                setToast(null);
+            }, 6000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast]);
 
     return (
-      <div className="h-screen w-screen bg-gray-50 dark:bg-dark-background text-foreground font-sans antialiased overflow-hidden flex items-center justify-center p-0 md:p-4">
+      <div className="h-screen w-screen bg-gray-50 dark:bg-dark-background text-foreground dark:text-dark-foreground font-sans antialiased overflow-hidden flex items-center justify-center p-0 md:p-4">
         {/* Main Phone View */}
-        <div className="w-full max-w-md h-full max-h-[900px] bg-card dark:bg-dark-card shadow-2xl rounded-none md:rounded-[3rem] border border-border/40 overflow-hidden relative flex flex-col">
+        <div className="w-full max-w-md h-full max-h-[900px] bg-card dark:bg-dark-card text-foreground dark:text-dark-foreground shadow-2xl rounded-none md:rounded-[3rem] border border-border/40 overflow-hidden relative flex flex-col">
+            {/* Real-time Visual Toast Header */}
+            {toast && (
+                <div 
+                    id="realtime-toast"
+                    className="absolute top-4 left-4 right-4 z-50 bg-white/95 dark:bg-dark-card/95 border border-emerald-500 shadow-[0_4px_20px_rgba(16,185,129,0.3)] p-4 rounded-2xl flex items-start gap-3 backdrop-blur-md transition-all duration-300 animate-[bounce_0.5s_ease-out_1]"
+                >
+                    <div className="w-8 h-8 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="w-5 h-5 animate-pulse" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <h4 className="text-[11px] font-black uppercase text-slate-900 dark:text-white tracking-wide">{toast.title}</h4>
+                        <p className="text-[10px] font-semibold text-slate-600 dark:text-gray-300 mt-1 leading-relaxed">{toast.message}</p>
+                    </div>
+                    <button 
+                        id="close-toast-btn"
+                        onClick={() => setToast(null)} 
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-white text-[10px] font-black p-1 transition"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
             {!state.isAuthenticated ? (
                 <Auth />
             ) : (
@@ -686,7 +832,7 @@ const AppContent: React.FC = () => {
         </div>
       </div>
     );
-}
+};
 
 export default function App() {
     return (
